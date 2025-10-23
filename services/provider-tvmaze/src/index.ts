@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
 import { Logger, getRedisClient, CacheManager } from '@moviehub/shared';
 import { TVMazeClient } from './tvmaze-client';
 import { MovieSearchParams } from '@moviehub/shared';

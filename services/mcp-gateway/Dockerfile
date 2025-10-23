@@ -63,3 +63,4 @@ ENV PORT=3007
 
 # 启动命令
 CMD ["node", "services/mcp-gateway/dist/index.js"]
+

@@ -35,6 +35,8 @@ services:
       - OMDB_URL=http://omdb:3003
       - TVMAZE_URL=http://tvmaze:3006
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       redis:
         condition: service_healthy
@@ -69,8 +71,10 @@ services:
       - NODE_ENV=production
       - PORT=3001
       - QWEN_API_KEY=${QWEN_API_KEY}
-      - QWEN_API_URL=https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation
+      - QWEN_API_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       redis:
         condition: service_healthy
@@ -94,6 +98,8 @@ services:
       - PORT=3002
       - TMDB_API_KEY=${TMDB_API_KEY}
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       redis:
         condition: service_healthy
@@ -117,6 +123,8 @@ services:
       - PORT=3003
       - OMDB_API_KEY=${OMDB_API_KEY}
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       redis:
         condition: service_healthy
@@ -139,6 +147,8 @@ services:
       - NODE_ENV=production
       - PORT=3006
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       redis:
         condition: service_healthy
@@ -164,6 +174,8 @@ services:
       - OMDB_PROVIDER_URL=http://omdb:3003
       - TVMAZE_PROVIDER_URL=http://tvmaze:3006
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       redis:
         condition: service_healthy
@@ -192,6 +204,8 @@ services:
       - NODE_ENV=production
       - PORT=3005
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       redis:
         condition: service_healthy
@@ -214,6 +228,8 @@ services:
       - NODE_ENV=production
       - PORT=3007
       - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       redis:
         condition: service_healthy
@@ -251,3 +267,4 @@ volumes:
 networks:
   default:
     name: moviehub-network
+

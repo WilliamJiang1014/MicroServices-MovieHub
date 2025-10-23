@@ -63,3 +63,4 @@ ENV PORT=3003
 
 # 启动命令
 CMD ["node", "services/provider-omdb/dist/index.js"]
+

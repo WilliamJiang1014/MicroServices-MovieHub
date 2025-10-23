@@ -63,3 +63,4 @@ ENV PORT=3006
 
 # 启动命令
 CMD ["node", "services/provider-tvmaze/dist/index.js"]
+

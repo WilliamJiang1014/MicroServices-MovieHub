@@ -63,3 +63,4 @@ ENV PORT=3010
 
 # 启动命令
 CMD ["node", "services/graph-orchestrator/dist/index.js"]
+
