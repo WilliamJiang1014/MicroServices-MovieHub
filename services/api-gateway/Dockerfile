@@ -64,3 +64,4 @@ ENV PORT=3000
 # 启动命令
 CMD ["node", "services/api-gateway/dist/index.js"]
 
+

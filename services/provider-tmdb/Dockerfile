@@ -64,3 +64,4 @@ ENV PORT=3002
 # 启动命令
 CMD ["node", "services/provider-tmdb/dist/index.js"]
 
+

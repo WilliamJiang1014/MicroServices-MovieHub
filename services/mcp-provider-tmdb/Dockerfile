@@ -64,3 +64,4 @@ ENV PORT=3008
 # 启动命令
 CMD ["node", "services/mcp-provider-tmdb/dist/index.js"]
 
+

@@ -64,3 +64,4 @@ ENV PORT=3004
 # 启动命令
 CMD ["node", "services/aggregation-service/dist/index.js"]
 
+

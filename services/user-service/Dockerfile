@@ -64,3 +64,4 @@ ENV PORT=3005
 # 启动命令
 CMD ["node", "services/user-service/dist/index.js"]
 
+
