@@ -1,0 +1,37 @@
+{
+  "name": "moviehub-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Movie Hub - Multi-source Movie Aggregation Platform",
+  "scripts": {
+    "dev": "concurrently -n gateway,llm,tmdb,omdb,tvmaze,aggregation,user,web \"pnpm dev:gateway\" \"pnpm dev:llm\" \"pnpm dev:tmdb\" \"pnpm dev:omdb\" \"pnpm dev:tvmaze\" \"pnpm dev:aggregation\" \"pnpm dev:user\" \"pnpm dev:web\"",
+    "dev:services": "concurrently -n gateway,llm,tmdb,omdb,tvmaze,aggregation,user \"pnpm dev:gateway\" \"pnpm dev:llm\" \"pnpm dev:tmdb\" \"pnpm dev:omdb\" \"pnpm dev:tvmaze\" \"pnpm dev:aggregation\" \"pnpm dev:user\"",
+    "dev:mcp": "concurrently -n mcp-gateway,mcp-tmdb,mcp-omdb,graph-orchestrator \"pnpm dev:mcp-gateway\" \"pnpm dev:mcp-tmdb\" \"pnpm dev:mcp-omdb\" \"pnpm dev:graph-orchestrator\"",
+    "dev:all": "concurrently -n gateway,llm,tmdb,omdb,tvmaze,aggregation,user,web,mcp-gateway,mcp-tmdb,mcp-omdb,graph-orchestrator \"pnpm dev:gateway\" \"pnpm dev:llm\" \"pnpm dev:tmdb\" \"pnpm dev:omdb\" \"pnpm dev:tvmaze\" \"pnpm dev:aggregation\" \"pnpm dev:user\" \"pnpm dev:web\" \"pnpm dev:mcp-gateway\" \"pnpm dev:mcp-tmdb\" \"pnpm dev:mcp-omdb\" \"pnpm dev:graph-orchestrator\"",
+    "dev:gateway": "pnpm --filter @moviehub/api-gateway dev",
+    "dev:llm": "pnpm --filter @moviehub/llm-service dev",
+    "dev:tmdb": "pnpm --filter @moviehub/provider-tmdb dev",
+    "dev:omdb": "pnpm --filter @moviehub/provider-omdb dev",
+    "dev:tvmaze": "pnpm --filter @moviehub/provider-tvmaze dev",
+    "dev:aggregation": "pnpm --filter @moviehub/aggregation-service dev",
+    "dev:user": "pnpm --filter @moviehub/user-service dev",
+    "dev:web": "pnpm --filter @moviehub/web-client dev",
+    "dev:mcp-gateway": "pnpm --filter @moviehub/mcp-gateway dev",
+    "dev:mcp-tmdb": "pnpm --filter @moviehub/mcp-provider-tmdb dev",
+    "dev:mcp-omdb": "pnpm --filter @moviehub/mcp-provider-omdb dev",
+    "dev:graph-orchestrator": "pnpm --filter @moviehub/graph-orchestrator dev",
+    "build": "pnpm -r build",
+    "clean": "pnpm -r clean",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "concurrently": "^8.2.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
+

@@ -1,0 +1,32 @@
+{
+  "name": "@moviehub/mcp-gateway",
+  "version": "1.0.0",
+  "description": "MCP Gateway - Registry and Discovery Center",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "@moviehub/shared": "workspace:*",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "ws": "^8.14.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.0"
+  }
+}
+
+
+
