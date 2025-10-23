@@ -39,8 +39,9 @@ docker-compose --version
 ### 2. 克隆项目
 
 ```bash
-git clone <repository-url>
-cd moviehub
+# 克隆MovieHub项目
+git clone https://github.com/WilliamJiang1014/MicroServices-MovieHub.git
+cd MicroServices-MovieHub
 ```
 
 ### 3. 配置环境变量
@@ -50,19 +51,22 @@ cd moviehub
 cp env.docker.example .env
 
 # 编辑环境变量文件
-nano .env
+vim .env
 ```
 
 在`.env`文件中填入您的API密钥：
 
 ```env
 # TMDB API配置
+# 申请地址: https://www.themoviedb.org/settings/api
 TMDB_API_KEY=your_tmdb_api_key_here
 
 # OMDb API配置
+# 申请地址: http://www.omdbapi.com/apikey.aspx
 OMDB_API_KEY=your_omdb_api_key_here
 
 # 通义千问API配置
+# 申请地址: https://dashscope.console.aliyun.com/
 QWEN_API_KEY=your_qwen_api_key_here
 
 # Redis配置
@@ -72,19 +76,50 @@ REDIS_URL=redis://redis:6379
 NODE_ENV=production
 ```
 
+#### API密钥申请指南
+
+**1. TMDB API Key**
+- 访问：https://www.themoviedb.org/settings/api
+- 注册账号后申请API密钥（免费）
+- 免费额度：40次/10秒
+- 用途：电影数据获取
+
+**2. OMDb API Key**
+- 访问：http://www.omdbapi.com/apikey.aspx
+- 免费额度：1000次/天
+- 用途：IMDB评分和Rotten Tomatoes数据
+
+**3. 通义千问 API Key**
+- 访问：https://dashscope.console.aliyun.com/
+- 注册阿里云账号并开通DashScope服务
+- 创建API Key
+- 用途：AI摘要生成和推荐
+
+**4. TVMaze API**
+- 无需API Key
+- 完全免费使用
+- 用途：电视剧数据
+
 ### 4. 使用部署脚本（推荐）
 
 ```bash
-# 运行部署脚本
+# 给脚本添加执行权限
+chmod +x scripts/*.sh
+
+# 使用快速部署脚本
+./scripts/quick-deploy.sh
+
+# 或使用完整部署脚本
 ./scripts/docker-deploy.sh
 ```
 
-脚本提供以下功能：
-- ✅ 环境检查
-- 🔧 自动构建镜像
-- 🚀 一键启动服务
-- 📊 健康检查
-- 📋 服务状态显示
+#### 部署脚本功能
+
+- ✅ **环境检查**：自动检查Docker和Docker Compose
+- ✅ **镜像构建**：自动构建所有服务镜像
+- ✅ **服务启动**：一键启动所有微服务
+- ✅ **健康检查**：自动验证服务状态
+- ✅ **访问信息**：显示服务访问地址
 
 ### 5. 手动部署
 
@@ -256,8 +291,16 @@ docker-compose exec api-gateway env | grep API_KEY
 # 重新设置环境变量
 docker-compose down
 # 编辑.env文件
+vim .env
 docker-compose up -d
 ```
+
+**API密钥配置检查清单**：
+- ✅ TMDB_API_KEY：格式为32位字符串
+- ✅ OMDB_API_KEY：格式为8位字符串
+- ✅ QWEN_API_KEY：格式为sk-开头的字符串
+- ✅ 确保.env文件在项目根目录
+- ✅ 确保没有多余的空格或引号
 
 #### 3. 网络连接问题
 
