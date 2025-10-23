@@ -69,14 +69,26 @@ app.get('/api/search', async (req, res) => {
     // Collect successful results
     const allMovies: Movie[] = [];
 
+    // Log results from each provider
     if (tmdbResult.status === 'fulfilled' && tmdbResult.value.data.success) {
       allMovies.push(...(tmdbResult.value.data.data || []));
+      logger.info(`TMDB: Found ${tmdbResult.value.data.data?.length || 0} movies`);
+    } else {
+      logger.warn(`TMDB: Failed - ${tmdbResult.status === 'rejected' ? tmdbResult.reason?.message : 'Invalid response'}`);
     }
+    
     if (omdbResult.status === 'fulfilled' && omdbResult.value.data.success) {
       allMovies.push(...(omdbResult.value.data.data || []));
+      logger.info(`OMDb: Found ${omdbResult.value.data.data?.length || 0} movies`);
+    } else {
+      logger.warn(`OMDb: Failed - ${omdbResult.status === 'rejected' ? omdbResult.reason?.message : 'Invalid response'}`);
     }
+    
     if (tvmazeResult.status === 'fulfilled' && tvmazeResult.value.data.success) {
       allMovies.push(...(tvmazeResult.value.data.data || []));
+      logger.info(`TVMaze: Found ${tvmazeResult.value.data.data?.length || 0} movies`);
+    } else {
+      logger.warn(`TVMaze: Failed - ${tvmazeResult.status === 'rejected' ? tvmazeResult.reason?.message : 'Invalid response'}`);
     }
 
     // Deduplicate and sort
