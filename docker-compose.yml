@@ -238,6 +238,106 @@ services:
       timeout: 10s
       retries: 3
 
+  # TMDB MCP Provider
+  mcp-tmdb:
+    build:
+      context: .
+      dockerfile: services/mcp-provider-tmdb/Dockerfile
+    container_name: moviehub-mcp-tmdb
+    ports:
+      - "3008:3008"
+    environment:
+      - NODE_ENV=production
+      - PORT=3008
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # OMDb MCP Provider
+  mcp-omdb:
+    build:
+      context: .
+      dockerfile: services/mcp-provider-omdb/Dockerfile
+    container_name: moviehub-mcp-omdb
+    ports:
+      - "3009:3009"
+    environment:
+      - NODE_ENV=production
+      - PORT=3009
+      - OMDB_API_KEY=${OMDB_API_KEY}
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MCP服务自动注册初始化容器
+  mcp-registrar:
+    image: curlimages/curl:latest
+    container_name: moviehub-mcp-registrar
+    depends_on:
+      mcp-gateway:
+        condition: service_healthy
+      mcp-tmdb:
+        condition: service_healthy
+      mcp-omdb:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo '🔧 等待MCP服务启动...' &&
+        sleep 10 &&
+        echo '📝 注册TMDB Provider...' &&
+        curl -X POST 'http://mcp-gateway:3007/register' -H 'Content-Type: application/json' -d '{\"name\": \"tmdb-provider\", \"endpoint\": \"http://mcp-tmdb:3008\", \"description\": \"TMDB Movie Provider\", \"version\": \"1.0.0\"}' &&
+        echo '📝 注册OMDb Provider...' &&
+        curl -X POST 'http://mcp-gateway:3007/register' -H 'Content-Type: application/json' -d '{\"name\": \"omdb-provider\", \"endpoint\": \"http://mcp-omdb:3009\", \"description\": \"OMDb Movie Provider\", \"version\": \"1.0.0\"}' &&
+        echo '✅ MCP服务注册完成！'
+      "
+    restart: "no"
+
+  # Graph Orchestrator - LangGraph工作流编排
+  graph-orchestrator:
+    build:
+      context: .
+      dockerfile: services/graph-orchestrator/Dockerfile
+    container_name: moviehub-graph-orchestrator
+    ports:
+      - "3010:3010"
+    environment:
+      - NODE_ENV=production
+      - PORT=3010
+      - MCP_GATEWAY_URL=http://mcp-gateway:3007
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      mcp-registrar:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # Web前端应用
   web-client:
     build:
@@ -251,12 +351,17 @@ services:
     depends_on:
       api-gateway:
         condition: service_healthy
+      graph-orchestrator:
+        condition: service_healthy
+      mcp-gateway:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 40s
 
 volumes:
   redis_data:

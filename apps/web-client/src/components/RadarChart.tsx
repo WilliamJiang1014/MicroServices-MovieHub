@@ -11,9 +11,9 @@ interface RadarPoint {
 }
 
 const RadarChart: React.FC<RadarChartProps> = ({ ratings, className = '' }) => {
-  const size = 200;
+  const size = 300;
   const center = size / 2;
-  const radius = 80;
+  const radius = 100;
   const numPoints = ratings.length;
   
   // Calculate points for each rating
@@ -117,7 +117,7 @@ const RadarChart: React.FC<RadarChartProps> = ({ ratings, className = '' }) => {
         {/* Labels */}
         {ratings.map((rating, index) => {
           const angle = (2 * Math.PI * index) / numPoints - Math.PI / 2;
-          const labelRadius = radius + 25;
+          const labelRadius = radius + 35;
           const labelX = center + labelRadius * Math.cos(angle);
           const labelY = center + labelRadius * Math.sin(angle);
           
@@ -128,7 +128,7 @@ const RadarChart: React.FC<RadarChartProps> = ({ ratings, className = '' }) => {
               y={labelY}
               textAnchor="middle"
               dominantBaseline="middle"
-              fontSize="11"
+              fontSize="12"
               fill="var(--text-secondary)"
               fontWeight="500"
             >

@@ -35,10 +35,10 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({
   similarMovies, 
   className = '' 
 }) => {
-  const size = 400;
+  const size = 450;
   const centerX = size / 2;
   const centerY = size / 2;
-  const orbitRadius = 120;
+  const orbitRadius = 140;
   
   // Calculate positions for similar movies
   const calculatePositions = (): Node[] => {
@@ -134,11 +134,11 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({
               x={node.x}
               y={node.y + 35}
               textAnchor="middle"
-              fontSize="10"
+              fontSize="11"
               fill="var(--text-secondary)"
               className="network-label"
             >
-              {node.title.length > 12 ? node.title.substring(0, 12) + '...' : node.title}
+              {node.title.length > 15 ? node.title.substring(0, 15) + '...' : node.title}
             </text>
             
             {/* Year */}
@@ -147,7 +147,7 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({
                 x={node.x}
                 y={node.y + 48}
                 textAnchor="middle"
-                fontSize="9"
+                fontSize="10"
                 fill="var(--text-muted)"
               >
                 ({node.year})
@@ -184,21 +184,21 @@ const NetworkGraph: React.FC<NetworkGraphProps> = ({
             x={centerNode.x}
             y={centerNode.y + 40}
             textAnchor="middle"
-            fontSize="11"
+            fontSize="12"
             fill="var(--text-primary)"
             fontWeight="600"
             className="center-label"
           >
-            {centerNode.title.length > 15 ? centerNode.title.substring(0, 15) + '...' : centerNode.title}
+            {centerNode.title.length > 18 ? centerNode.title.substring(0, 18) + '...' : centerNode.title}
           </text>
           
           {/* Center movie year */}
           {centerNode.year && (
             <text
               x={centerNode.x}
-              y={centerNode.y + 53}
+              y={centerNode.y + 55}
               textAnchor="middle"
-              fontSize="10"
+              fontSize="11"
               fill="var(--text-secondary)"
             >
               ({centerNode.year})

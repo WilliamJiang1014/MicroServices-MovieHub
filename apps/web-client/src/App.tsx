@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { mcpClient } from './services/mcpClient';
 import RadarChart from './components/RadarChart';
@@ -60,17 +60,35 @@ function App() {
     return prefersDark ? 'dark' : 'light';
   });
   
-  // MCP相关状态
   const [useMCP, setUseMCP] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState<MovieDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [activeTab, setActiveTab] = useState<'search' | 'watchlist'>('search');
   const [watchlistFilter, setWatchlistFilter] = useState<string>('all');
   const [sortMode, setSortMode] = useState<string>('relevance');
-  const [allMovies, setAllMovies] = useState<Movie[]>([]); // Store all fetched movies
+  const [allMovies, setAllMovies] = useState<Movie[]>([]);
+  const [clearingCache, setClearingCache] = useState(false);
 
-  // Client-side sorting function
+  /** 清除搜索缓存 */
+  const clearCache = async () => {
+    setClearingCache(true);
+    try {
+      const response = await axios.delete(`${API_BASE}/cache/clear?type=search`);
+      if (response.data.success) {
+        alert('搜索缓存已清除！');
+      }
+    } catch (error) {
+      console.error('Failed to clear cache:', error);
+      alert('清除缓存失败，请稍后重试');
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
+  /** 客户端排序函数 */
   const sortMovies = (movies: Movie[], mode: string): Movie[] => {
+    if (!movies || movies.length === 0) return movies;
+    
     const list = [...movies];
     switch (mode) {
       case 'year_desc':
@@ -78,40 +96,63 @@ function App() {
       case 'year_asc':
         return list.sort((a, b) => (a.year || 0) - (b.year || 0));
       case 'title_az':
-        return list.sort((a, b) => a.title.localeCompare(b.title));
+        return list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
       case 'title_za':
-        return list.sort((a, b) => b.title.localeCompare(a.title));
+        return list.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
       case 'votes_desc': {
         return list.sort((a, b) => {
-          const votesA = a.ratings.reduce((sum, r) => sum + (r.votes || 0), 0);
-          const votesB = b.ratings.reduce((sum, r) => sum + (r.votes || 0), 0);
+          const votesA = (a.ratings || []).reduce((sum, r) => sum + (r.votes || 0), 0);
+          const votesB = (b.ratings || []).reduce((sum, r) => sum + (r.votes || 0), 0);
           return votesB - votesA;
         });
       }
       case 'votes_asc': {
         return list.sort((a, b) => {
-          const votesA = a.ratings.reduce((sum, r) => sum + (r.votes || 0), 0);
-          const votesB = b.ratings.reduce((sum, r) => sum + (r.votes || 0), 0);
+          const votesA = (a.ratings || []).reduce((sum, r) => sum + (r.votes || 0), 0);
+          const votesB = (b.ratings || []).reduce((sum, r) => sum + (r.votes || 0), 0);
           return votesA - votesB;
         });
       }
-      case 'relevance':
-      default:
-        // For relevance, use aggregated rating as fallback
+      case 'rating_desc': {
         return list.sort((a, b) => {
           const scoreA = a.aggregatedRating?.score || 0;
           const scoreB = b.aggregatedRating?.score || 0;
           return scoreB - scoreA;
         });
+      }
+      case 'rating_asc': {
+        return list.sort((a, b) => {
+          const scoreA = a.aggregatedRating?.score || 0;
+          const scoreB = b.aggregatedRating?.score || 0;
+          return scoreA - scoreB;
+        });
+      }
+      case 'relevance':
+      default:
+        return list;
     }
   };
 
-  // Apply theme to document
+  /** 应用主题到文档 */
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  /** 当排序模式或电影列表变化时重新排序 */
+  useEffect(() => {
+    if (allMovies && allMovies.length > 0) {
+      if (sortMode === 'relevance') {
+        setMovies([...allMovies]);
+      } else {
+        const sorted = sortMovies(allMovies, sortMode);
+        setMovies(sorted);
+      }
+      setCurrentPage(1);
+    }
+  }, [sortMode, allMovies]);
+
+  /** 搜索电影 */
   const searchMovies = async () => {
     if (!query.trim()) return;
 
@@ -121,41 +162,65 @@ function App() {
     
     try {
       if (useMCP) {
-        // 使用MCP工作流搜索
         const response = await mcpClient.executeWorkflow({
           query: query,
           userId: DEFAULT_USER_ID
         });
         
         if (response.success && response.result?.result) {
-          // 转换MCP结果为电影格式
-          const mcpMovies = response.result.result.results.map((movie: any) => ({
-            id: movie.imdbId || movie.id || `${movie.title}-${movie.year}`,
-            title: movie.title,
-            year: movie.year,
-            genres: movie.genres || [],
-            plot: movie.overview || movie.plot,
-            poster: movie.poster || movie.posterPath,
-            backdrop: movie.backdrop || movie.backdropPath,
-            ratings: movie.ratings || [],
-            sources: response.result?.result?.sources || ['mcp'],
-            aggregatedRating: movie.aggregatedRating
-          }));
+          const mcpMovies = response.result.result.results.map((movie: any) => {
+            let movieId: string;
+            if (movie.imdbId) {
+              movieId = `omdb-${movie.imdbId}`;
+            } else if (movie.tmdbId || movie.id) {
+              movieId = `tmdb-${movie.tmdbId || movie.id}`;
+            } else if (movie.tvmazeId) {
+              movieId = `tvmaze-${movie.tvmazeId}`;
+            } else {
+              movieId = `mcp-${movie.title}-${movie.year}`;
+            }
+
+            return {
+              id: movieId,
+              title: movie.title,
+              year: movie.year,
+              genres: movie.genres || [],
+              plot: movie.overview || movie.plot || movie.description,
+              poster: movie.poster || movie.posterPath || movie.posterURL,
+              backdrop: movie.backdrop || movie.backdropPath || movie.backdropURL,
+              ratings: movie.ratings || [{
+                source: 'TMDB',
+                value: movie.rating || movie.voteAverage || 0,
+                maxValue: 10,
+                votes: movie.voteCount || 0
+              }],
+              sources: response.result?.result?.sources || ['mcp'],
+              aggregatedRating: movie.aggregatedRating || {
+                score: movie.rating || movie.voteAverage || 0,
+                breakdown: { tmdb: movie.rating || movie.voteAverage || 0 }
+              },
+              cast: movie.cast || [],
+              directors: movie.directors || movie.director ? [movie.director] : [],
+              externalIds: {
+                tmdb: movie.tmdbId || movie.id,
+                imdb: movie.imdbId,
+                tvmaze: movie.tvmazeId
+              }
+            };
+          });
           
-          setMovies(mcpMovies);
+          setAllMovies(mcpMovies);
         } else {
           setError(response.error || 'MCP search failed');
         }
       } else {
-        // 使用原有API搜索
         const response = await axios.get(`${API_BASE}/search`, {
-          params: { query, limit: 64, sort: sortMode },
+          params: { query, limit: 64 },
         });
         
         if (response.data.success) {
           const fetchedMovies = response.data.data || [];
           setAllMovies(fetchedMovies);
-          setMovies(fetchedMovies);
         } else {
           setError('No movies found');
         }
@@ -167,12 +232,14 @@ function App() {
     }
   };
 
+  /** 处理回车键搜索 */
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       searchMovies();
     }
   };
 
+  /** 打开电影详情 */
   const openMovieDetail = async (movie: Movie) => {
     setSelectedMovie(movie as MovieDetail);
     setLoadingDetail(true);
@@ -180,22 +247,20 @@ function App() {
     try {
       const response = await axios.get(`${API_BASE}/movie/${movie.id}/summary`);
       if (response.data.success) {
-        setSelectedMovie(response.data.data.movie);
-        if (response.data.data.aiSummary) {
-          setSelectedMovie((prev) => prev ? {
-            ...prev,
-            aiSummary: response.data.data.aiSummary,
-          } : null);
-        }
+        setSelectedMovie({
+          ...response.data.data.movie,
+          aiSummary: response.data.data.aiSummary,
+        });
       }
     } catch (err) {
       console.error('Failed to load movie details:', err);
+      setSelectedMovie(movie as MovieDetail);
     } finally {
       setLoadingDetail(false);
     }
   };
 
-  // ESC key to close modal
+  /** ESC键关闭弹窗 */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -206,6 +271,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  /** 加载观影清单 */
   const loadWatchlist = async () => {
     setLoading(true);
     setError('');
@@ -217,7 +283,6 @@ function App() {
         const items = response.data.data || [];
         setWatchlist(items);
         
-        // 获取每个观影清单项对应的电影详情
         const moviePromises = items.map((item: WatchlistItem) =>
           axios.get(`${API_BASE}/movie/${item.movieId}`).catch(() => null)
         );
@@ -236,6 +301,7 @@ function App() {
     }
   };
 
+  /** 添加到观影清单 */
   const addToWatchlist = async (movieId: string, status: string) => {
     try {
       await axios.post(`${API_BASE}/users/${DEFAULT_USER_ID}/watchlist`, {
@@ -244,7 +310,6 @@ function App() {
       });
       alert('Added to watchlist!');
       
-      // 如果当前在观影清单标签，刷新列表
       if (activeTab === 'watchlist') {
         loadWatchlist();
       }
@@ -253,6 +318,7 @@ function App() {
     }
   };
 
+  /** 从观影清单移除 */
   const removeFromWatchlist = async (itemId: string) => {
     try {
       await axios.delete(`${API_BASE}/watchlist/item/${itemId}`);
@@ -263,19 +329,39 @@ function App() {
     }
   };
 
-  const updateWatchlistItem = async (
+  const updateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  
+  /** 更新观影清单项（带防抖） */
+  const updateWatchlistItem = useCallback(async (
     itemId: string, 
     updates: { status?: string; progress?: number; rating?: number; notes?: string }
   ) => {
     try {
-      await axios.patch(`${API_BASE}/watchlist/item/${itemId}`, updates);
-      loadWatchlist();
+      if (updates.progress !== undefined) {
+        if (updateTimerRef.current) {
+          clearTimeout(updateTimerRef.current);
+        }
+        
+        updateTimerRef.current = setTimeout(async () => {
+          try {
+            await axios.patch(`${API_BASE}/watchlist/item/${itemId}`, updates);
+            setWatchlist(prev => prev.map(item => 
+              item.id === itemId ? { ...item, ...updates } : item
+            ));
+          } catch (err: any) {
+            console.error('Failed to update progress:', err);
+          }
+        }, 300);
+      } else {
+        await axios.patch(`${API_BASE}/watchlist/item/${itemId}`, updates);
+        loadWatchlist();
+      }
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to update watchlist item');
     }
-  };
+  }, []);
 
-  // 当切换到观影清单标签时，加载观影清单
+  /** 切换到观影清单时加载数据 */
   useEffect(() => {
     if (activeTab === 'watchlist') {
       loadWatchlist();
@@ -372,12 +458,6 @@ function App() {
                     value={sortMode}
                     onChange={(e) => {
                       setSortMode(e.target.value);
-                      // Apply client-side sorting to current results
-                      if (allMovies.length > 0) {
-                        const sortedMovies = sortMovies(allMovies, e.target.value);
-                        setMovies(sortedMovies);
-                        setCurrentPage(1); // Reset to first page
-                      }
                     }}
                     title="排序"
                   >
@@ -389,6 +469,15 @@ function App() {
                     <option value="votes_desc">投票数(高→低)</option>
                     <option value="votes_asc">投票数(低→高)</option>
                   </select>
+                  
+                  <button
+                    className="clear-cache-button"
+                    onClick={clearCache}
+                    disabled={clearingCache}
+                    title="清除搜索缓存"
+                  >
+                    {clearingCache ? '清除中...' : '🗑️ 清除缓存'}
+                  </button>
                 </div>
               </div>
             </div>
@@ -433,7 +522,6 @@ function App() {
         </div>
       )}
 
-      {/* 搜索结果 */}
       {activeTab === 'search' && !loading && movies.length > 0 && (
         <div className="movies-grid">
           {movies
@@ -521,7 +609,6 @@ function App() {
         </div>
       )}
 
-      {/* 观影清单 */}
       {activeTab === 'watchlist' && !loading && watchlistMovies.length > 0 && (
         <div className="movies-grid">
           {watchlistMovies
@@ -549,7 +636,6 @@ function App() {
                   <div className="movie-title">{movie.title}</div>
                   <div className="movie-year">{movie.year}</div>
                   
-                  {/* 状态选择器 */}
                   {watchlistItem && (
                     <div style={{ marginTop: '10px', marginBottom: '10px' }}>
                       <select
@@ -568,30 +654,64 @@ function App() {
                     </div>
                   )}
 
-                  {/* 进度条 (仅在"在看"状态显示) */}
                   {watchlistItem && watchlistItem.status === 'watching' && (
-                    <div style={{ marginBottom: '10px' }}>
-                      <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '5px' }}>
-                        观看进度: {watchlistItem.progress || 0}%
+                    <div 
+                      className="progress-wrapper"
+                      style={{ marginBottom: '10px' }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div style={{ 
+                        fontSize: '0.8rem', 
+                        color: '#666', 
+                        marginBottom: '5px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span>观看进度</span>
+                        <span style={{ 
+                          fontWeight: '600', 
+                          color: 'var(--primary-500)',
+                          fontSize: '0.9rem'
+                        }}>
+                          {watchlistItem.progress || 0}%
+                        </span>
                       </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={watchlistItem.progress || 0}
-                        className="progress-slider"
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          updateWatchlistItem(watchlistItem.id, { 
-                            progress: parseInt(e.target.value) 
-                          });
-                        }}
+                      <div 
+                        className="progress-container"
+                        onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => e.stopPropagation()}
-                      />
+                      >
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={watchlistItem.progress || 0}
+                          className="progress-slider"
+                          onInput={(e) => {
+                            const target = e.target as HTMLInputElement;
+                            setWatchlist(prev => prev.map(item => 
+                              item.id === watchlistItem.id 
+                                ? { ...item, progress: parseInt(target.value) } 
+                                : item
+                            ));
+                            updateWatchlistItem(watchlistItem.id, { 
+                              progress: parseInt(target.value) 
+                            });
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
+                          title={`拖动调整进度: ${watchlistItem.progress || 0}%`}
+                        />
+                        <div 
+                          className="progress-fill" 
+                          style={{ width: `${watchlistItem.progress || 0}%` }}
+                        />
+                      </div>
                     </div>
                   )}
 
-                  {/* 个人评分 (仅在"看过"状态显示) */}
                   {watchlistItem && watchlistItem.status === 'watched' && (
                     <div style={{ marginBottom: '10px' }}>
                       <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '5px' }}>
@@ -614,7 +734,6 @@ function App() {
                     </div>
                   )}
 
-                  {/* 添加时间 */}
                   {watchlistItem && (
                     <div style={{ fontSize: '0.75rem', color: '#999', marginBottom: '8px' }}>
                       添加于: {new Date(watchlistItem.addedAt).toLocaleDateString('zh-CN')}
@@ -640,7 +759,6 @@ function App() {
         </div>
       )}
 
-      {/* 空状态 - 搜索 */}
       {!loading && movies.length === 0 && activeTab === 'search' && (
         <div className="empty-state">
           <h2>🔍 Search for Movies</h2>
@@ -648,7 +766,6 @@ function App() {
         </div>
       )}
 
-      {/* 空状态 - 观影清单 */}
       {!loading && watchlistMovies.length === 0 && activeTab === 'watchlist' && (
         <div className="empty-state">
           <h2>📝 Your Watchlist is Empty</h2>
@@ -723,7 +840,6 @@ function App() {
                   </div>
                 </div>
 
-                {/* 评分对比图表 */}
                 <div className="rating-chart">
                   {selectedMovie.ratings.map((rating) => {
                     const percentage = (rating.value / rating.maxValue) * 100;
@@ -747,7 +863,6 @@ function App() {
                   })}
                 </div>
 
-                {/* 数据来源标签 */}
                 <div style={{ marginTop: '15px' }}>
                   <strong style={{ fontSize: '0.9rem', color: '#666' }}>Sources: </strong>
                   {selectedMovie.sources.map((source) => (
@@ -764,15 +879,14 @@ function App() {
                 </div>
               )}
 
-              {!loadingDetail && selectedMovie.aiSummary && (
-                <>
-                  {/* 新增可视化组件 */}
-                  <div className="visualization-container">
-                    <div className="visualization-section">
-                      <h3>📊 评分雷达图</h3>
-                      <RadarChart ratings={selectedMovie.ratings} />
-                    </div>
-                    
+              {!loadingDetail && selectedMovie.ratings && selectedMovie.ratings.length > 0 && (
+                <div className="visualization-container">
+                  <div className="visualization-section">
+                    <h3>📊 评分雷达图</h3>
+                    <RadarChart ratings={selectedMovie.ratings} />
+                  </div>
+
+                  {selectedMovie.aiSummary?.similarMovies && selectedMovie.aiSummary.similarMovies.length > 0 && (
                     <div className="visualization-section">
                       <h3>🕸️ 相似作品网络</h3>
                       <NetworkGraph 
@@ -785,11 +899,16 @@ function App() {
                         similarMovies={selectedMovie.aiSummary.similarMovies.map((movie, idx) => ({
                           id: `similar-${idx}`,
                           title: movie,
-                          similarity: Math.random() * 0.4 + 0.6 // 模拟60-100%的相似度
+                          similarity: Math.random() * 0.4 + 0.6
                         }))}
                       />
                     </div>
-                  </div>
+                  )}
+                </div>
+              )}
+
+              {!loadingDetail && selectedMovie.aiSummary && (
+                <>
 
                   <div className="modal-section">
                     <h3>🤖 AI Summary</h3>

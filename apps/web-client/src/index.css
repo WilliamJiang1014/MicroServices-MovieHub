@@ -189,7 +189,6 @@ body {
   box-shadow: var(--shadow-md);
   border: 1px solid var(--border-color);
   transition: transform 0.3s, box-shadow 0.3s;
-  cursor: pointer;
 }
 
 .movie-card:hover {
@@ -538,7 +537,42 @@ body {
   border-color: var(--primary-500);
 }
 
+/* 进度条包装器 - 完全隔离事件 */
+.progress-wrapper {
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* 进度条容器 */
+.progress-container {
+  position: relative;
+  width: 100%;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  pointer-events: auto;
+}
+
+/* 进度条填充背景 */
+.progress-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 8px;
+  background: linear-gradient(90deg, var(--primary-500) 0%, var(--primary-600) 100%);
+  border-radius: 4px;
+  pointer-events: none;
+  transition: width 0.1s ease-out;
+  z-index: 1;
+}
+
+/* 进度条滑块 */
 .progress-slider {
+  position: relative;
   width: 100%;
   height: 8px;
   border-radius: 4px;
@@ -546,35 +580,76 @@ body {
   outline: none;
   -webkit-appearance: none;
   appearance: none;
+  cursor: grab;
+  z-index: 2;
 }
 
+.progress-slider:active {
+  cursor: grabbing;
+}
+
+/* Webkit浏览器（Chrome, Safari, Edge）的滑块样式 */
 .progress-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-600) 100%);
-  cursor: pointer;
-  transition: transform 0.2s;
+  cursor: grab;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  border: 3px solid white;
+  position: relative;
+  z-index: 3;
 }
 
 .progress-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+  transform: scale(1.15);
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.4);
 }
 
+.progress-slider::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.5);
+}
+
+/* Firefox浏览器的滑块样式 */
 .progress-slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary-500) 0%, var(--primary-600) 100%);
-  cursor: pointer;
-  border: none;
-  transition: transform 0.2s;
+  cursor: grab;
+  border: 3px solid white;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  position: relative;
+  z-index: 3;
 }
 
 .progress-slider::-moz-range-thumb:hover {
-  transform: scale(1.2);
+  transform: scale(1.15);
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.4);
+}
+
+.progress-slider::-moz-range-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.5);
+}
+
+/* Firefox的进度轨道 */
+.progress-slider::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+
+/* Webkit的进度轨道 */
+.progress-slider::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
 }
 
 .rating-stars {
@@ -686,6 +761,36 @@ body {
   outline: none;
   border-color: var(--primary-500);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.clear-cache-button {
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+  margin-left: 10px;
+}
+
+.clear-cache-button:hover {
+  border-color: var(--danger-500);
+  background: rgba(239, 68, 68, 0.05);
+  color: var(--danger-500);
+}
+
+.clear-cache-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clear-cache-button:focus {
+  outline: none;
+  border-color: var(--danger-500);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
 }
 
 .segmented {
@@ -1008,6 +1113,11 @@ button:focus-visible,
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 400px;
 }
 
 .visualization-section h3 {
@@ -1016,6 +1126,22 @@ button:focus-visible,
   margin-bottom: 1rem;
   text-align: center;
   font-weight: 600;
+}
+
+/* 图表容器样式 */
+.radar-chart,
+.network-graph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.radar-chart svg,
+.network-graph svg {
+  max-width: 100%;
+  height: auto;
 }
 
 /* Responsive design for visualizations */

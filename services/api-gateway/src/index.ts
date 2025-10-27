@@ -5,24 +5,21 @@ import path from 'path';
 import axios from 'axios';
 import { Logger, getRedisClient, CacheManager } from '@moviehub/shared';
 
-// 加载项目根目录的 .env 文件
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const app = express();
 const port = process.env.PORT || 3000;
 const logger = new Logger('API-Gateway');
 
-// Initialize Redis and Cache Manager
 const redis = getRedisClient();
 const cacheManager = new CacheManager(redis, {
   keyPrefix: 'gateway',
-  defaultTTL: 1800, // 30 minutes
+  defaultTTL: 1800,
 });
 
 app.use(cors());
 app.use(express.json());
 
-// Service URLs
 const AGGREGATION_URL = process.env.AGGREGATION_URL || 'http://localhost:3004';
 const LLM_URL = process.env.LLM_URL || 'http://localhost:3001';
 const USER_URL = process.env.USER_URL || 'http://localhost:3005';
@@ -30,7 +27,6 @@ const TMDB_URL = process.env.TMDB_URL || 'http://localhost:3002';
 const OMDB_URL = process.env.OMDB_URL || 'http://localhost:3003';
 const TVMAZE_URL = process.env.TVMAZE_URL || 'http://localhost:3006';
 
-// Health check
 app.get('/health', async (req, res) => {
   try {
     const services = {
@@ -43,7 +39,6 @@ app.get('/health', async (req, res) => {
       tvmaze: 'unknown',
     };
 
-    // Check all services
     const checks = await Promise.allSettled([
       axios.get(`${AGGREGATION_URL}/health`),
       axios.get(`${LLM_URL}/health`),
@@ -67,7 +62,6 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// Welcome endpoint
 app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to MovieHub API Gateway',
@@ -82,9 +76,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// ========== Movie Search & Aggregation ==========
-
-// Search movies across providers (with caching)
+/** 搜索电影（带缓存） */
 app.get('/api/search', async (req, res) => {
   try {
     const query = req.query.query as string;
@@ -93,19 +85,16 @@ app.get('/api/search', async (req, res) => {
     
     logger.info(`Search request: ${query}`);
 
-    // Try to get from cache first
     const cached = await cacheManager.getCachedSearchResults(query, year, sort);
     if (cached) {
       logger.info(`Returning cached search results for: ${query}`);
       return res.json(cached);
     }
 
-    // Cache miss - fetch from aggregation service
     const response = await axios.get(`${AGGREGATION_URL}/api/search`, {
       params: req.query,
     });
 
-    // Cache the results
     await cacheManager.cacheSearchResults(query, year, response.data, undefined, sort);
 
     res.json(response.data);
@@ -117,24 +106,21 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-// Get movie details (with caching)
+/** 获取电影详情（带缓存） */
 app.get('/api/movie/:id', async (req, res) => {
   try {
     const movieId = req.params.id;
     logger.info(`Get movie details: ${movieId}`);
 
-    // Try to get from cache first
     const cached = await cacheManager.getCachedMovieDetails(movieId);
     if (cached) {
       logger.info(`Returning cached movie details for: ${movieId}`);
       return res.json(cached);
     }
 
-    // Cache miss - fetch from aggregation service
     const response = await axios.get(`${AGGREGATION_URL}/api/movie/${movieId}`);
 
-    // Cache the results (longer TTL for movie details)
-    await cacheManager.cacheMovieDetails(movieId, response.data, 7200); // 2 hours
+    await cacheManager.cacheMovieDetails(movieId, response.data, 7200);
 
     res.json(response.data);
   } catch (error: any) {
@@ -145,14 +131,11 @@ app.get('/api/movie/:id', async (req, res) => {
   }
 });
 
-// ========== LLM-Enhanced Movie Features ==========
-
-// Get AI-generated movie summary and recommendations
+/** 获取AI生成的电影摘要和推荐 */
 app.get('/api/movie/:id/summary', async (req, res) => {
   try {
     logger.info(`Get movie summary: ${req.params.id}`);
     
-    // First get movie details
     const movieResponse = await axios.get(`${AGGREGATION_URL}/api/movie/${req.params.id}`);
     const movie = movieResponse.data.data;
 
@@ -160,7 +143,6 @@ app.get('/api/movie/:id/summary', async (req, res) => {
       return res.status(404).json({ error: 'Movie not found' });
     }
 
-    // Then generate summary with LLM
     const summaryResponse = await axios.post(`${LLM_URL}/api/movie/summary`, {
       title: movie.title,
       plot: movie.plot,
@@ -183,7 +165,7 @@ app.get('/api/movie/:id/summary', async (req, res) => {
   }
 });
 
-// Generate AI summary for any movie query
+/** 为任意电影查询生成AI摘要 */
 app.post('/api/generate-summary', async (req, res) => {
   try {
     const response = await axios.post(`${LLM_URL}/api/movie/summary`, req.body);
@@ -196,9 +178,7 @@ app.post('/api/generate-summary', async (req, res) => {
   }
 });
 
-// ========== User & Watchlist Management ==========
-
-// Get user info
+/** 获取用户信息 */
 app.get('/api/users/:userId', async (req, res) => {
   try {
     const response = await axios.get(`${USER_URL}/api/user/${req.params.userId}`);
@@ -211,7 +191,7 @@ app.get('/api/users/:userId', async (req, res) => {
   }
 });
 
-// Get user's watchlist
+/** 获取用户观影清单 */
 app.get('/api/users/:userId/watchlist', async (req, res) => {
   try {
     const response = await axios.get(`${USER_URL}/api/watchlist/${req.params.userId}`, {
@@ -226,7 +206,7 @@ app.get('/api/users/:userId/watchlist', async (req, res) => {
   }
 });
 
-// Get watchlist stats
+/** 获取观影清单统计 */
 app.get('/api/users/:userId/watchlist/stats', async (req, res) => {
   try {
     const response = await axios.get(`${USER_URL}/api/watchlist/${req.params.userId}/stats`);
@@ -239,7 +219,7 @@ app.get('/api/users/:userId/watchlist/stats', async (req, res) => {
   }
 });
 
-// Add movie to watchlist
+/** 添加电影到观影清单 */
 app.post('/api/users/:userId/watchlist', async (req, res) => {
   try {
     logger.info(`Add to watchlist: ${req.body.movieId} for user ${req.params.userId}`);
@@ -253,7 +233,7 @@ app.post('/api/users/:userId/watchlist', async (req, res) => {
   }
 });
 
-// Update watchlist item
+/** 更新观影清单项 */
 app.patch('/api/watchlist/item/:itemId', async (req, res) => {
   try {
     const response = await axios.patch(`${USER_URL}/api/watchlist/item/${req.params.itemId}`, req.body);
@@ -266,7 +246,7 @@ app.patch('/api/watchlist/item/:itemId', async (req, res) => {
   }
 });
 
-// Delete watchlist item
+/** 删除观影清单项 */
 app.delete('/api/watchlist/item/:itemId', async (req, res) => {
   try {
     const response = await axios.delete(`${USER_URL}/api/watchlist/item/${req.params.itemId}`);
@@ -279,9 +259,7 @@ app.delete('/api/watchlist/item/:itemId', async (req, res) => {
   }
 });
 
-// ========== Enhanced Search with AI ==========
-
-// Search with AI-enhanced results
+/** AI增强搜索 */
 app.get('/api/search-enhanced', async (req, res) => {
   try {
     const query = req.query.query as string;
@@ -291,14 +269,12 @@ app.get('/api/search-enhanced', async (req, res) => {
 
     logger.info(`Enhanced search request: ${query}`);
 
-    // Get search results from aggregation service
     const searchResponse = await axios.get(`${AGGREGATION_URL}/api/search`, {
       params: req.query,
     });
 
     const movies = searchResponse.data.data || [];
 
-    // Optionally enhance top results with AI summaries (only for first 3 results)
     const enhancedMovies = await Promise.all(
       movies.slice(0, 3).map(async (movie: any) => {
         try {
@@ -330,9 +306,7 @@ app.get('/api/search-enhanced', async (req, res) => {
   }
 });
 
-// ========== Cache Management & Analytics ==========
-
-// Get popular searches
+/** 获取热门搜索 */
 app.get('/api/analytics/popular-searches', async (req, res) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
@@ -348,7 +322,7 @@ app.get('/api/analytics/popular-searches', async (req, res) => {
   }
 });
 
-// Get cache statistics
+/** 获取缓存统计 */
 app.get('/api/cache/stats', async (req, res) => {
   try {
     const stats = await cacheManager.getCacheStats();
@@ -363,7 +337,7 @@ app.get('/api/cache/stats', async (req, res) => {
   }
 });
 
-// Clear cache (admin endpoint)
+/** 清除缓存（管理端点） */
 app.delete('/api/cache/clear', async (req, res) => {
   try {
     const type = req.query.type as string;
@@ -388,7 +362,6 @@ app.delete('/api/cache/clear', async (req, res) => {
   }
 });
 
-// Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   logger.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });

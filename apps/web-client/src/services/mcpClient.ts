@@ -44,16 +44,21 @@ export interface MCPToolCallResponse {
 }
 
 class MCPClient {
-  private baseUrl: string;
+  private orchestratorUrl: string;
+  private gatewayUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:3010') {
-    this.baseUrl = baseUrl;
+  constructor() {
+    // 使用相对路径，通过nginx代理访问
+    // 在开发环境，vite会代理到localhost:3010和localhost:3007
+    // 在生产环境（Docker），nginx会代理到对应的容器
+    this.orchestratorUrl = '/api/mcp';
+    this.gatewayUrl = '/api/mcp-gateway';
   }
 
   // 执行工作流（自然语言查询）
   async executeWorkflow(request: MCPWorkflowRequest): Promise<MCPWorkflowResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/execute`, {
+      const response = await fetch(`${this.orchestratorUrl}/execute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -78,7 +83,7 @@ class MCPClient {
   // 直接调用工具
   async callTool(request: MCPToolCallRequest): Promise<MCPToolCallResponse> {
     try {
-      const response = await fetch('http://localhost:3007/call-tool', {
+      const response = await fetch(`${this.gatewayUrl}/call-tool`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -103,7 +108,7 @@ class MCPClient {
   // 获取可用工具列表
   async getAvailableTools(): Promise<any[]> {
     try {
-      const response = await fetch('http://localhost:3007/tools');
+      const response = await fetch(`${this.gatewayUrl}/tools`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -118,7 +123,7 @@ class MCPClient {
   // 获取服务器状态
   async getServerStatus(): Promise<any> {
     try {
-      const response = await fetch('http://localhost:3007/servers');
+      const response = await fetch(`${this.gatewayUrl}/servers`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }

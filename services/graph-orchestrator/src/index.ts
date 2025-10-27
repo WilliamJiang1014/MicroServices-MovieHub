@@ -5,7 +5,6 @@ import path from 'path';
 import axios from 'axios';
 import { Logger } from '@moviehub/shared';
 
-// 加载环境变量
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const app = express();
@@ -15,8 +14,8 @@ const logger = new Logger('Graph-Orchestrator');
 app.use(cors());
 app.use(express.json());
 
-// MCP Gateway配置
 const MCP_GATEWAY_URL = process.env.MCP_GATEWAY_URL || 'http://localhost:3007';
+const TVMAZE_PROVIDER_URL = process.env.TVMAZE_PROVIDER_URL || 'http://localhost:3006';
 
 interface WorkflowState {
   userQuery: string;
@@ -47,7 +46,6 @@ class MovieSearchOrchestrator {
   }
 
   private setupRoutes() {
-    // 健康检查
     app.get('/health', (req, res) => {
       res.json({ 
         status: 'healthy', 
@@ -56,7 +54,6 @@ class MovieSearchOrchestrator {
       });
     });
 
-    // 执行工作流
     app.post('/execute', async (req, res) => {
       try {
         const { query, userId } = req.body;
@@ -80,12 +77,12 @@ class MovieSearchOrchestrator {
     });
   }
 
+  /** 执行工作流 */
   private async executeWorkflow(query: string, userId?: string): Promise<any> {
     const startTime = Date.now();
     const executionTrace: ExecutionStep[] = [];
 
     try {
-      // 步骤1: 分析用户意图
       const intent = await this.analyzeIntent(query);
       executionTrace.push({
         step: 'analyze_intent',
@@ -97,7 +94,6 @@ class MovieSearchOrchestrator {
         timestamp: new Date()
       });
 
-      // 步骤2: 根据意图执行相应的工具链
       let result: any;
       switch (intent.type) {
         case 'search_movies':
@@ -136,22 +132,21 @@ class MovieSearchOrchestrator {
     }
   }
 
+  /** 分析用户意图 */
   private async analyzeIntent(query: string): Promise<any> {
     try {
-      // 使用LLM服务进行真正的AI意图分析
       const llmResponse = await this.callLLMForIntentAnalysis(query);
       return llmResponse;
     } catch (error) {
       logger.warn('LLM intent analysis failed, falling back to rule-based:', error);
-      // 回退到基于规则的意图分析
       return this.ruleBasedIntentAnalysis(query);
     }
   }
 
+  /** 调用LLM进行意图分析 */
   private async callLLMForIntentAnalysis(query: string): Promise<any> {
     try {
-      // 调用LLM服务进行意图分析
-      const response = await axios.post('http://localhost:3001/analyze-intent', {
+      const response = await axios.post('http://llm:3001/analyze-intent', {
         query: query,
         context: 'movie_search'
       });
@@ -167,16 +162,14 @@ class MovieSearchOrchestrator {
     }
   }
 
+  /** 基于规则的意图分析（回退方案） */
   private ruleBasedIntentAnalysis(query: string): any {
-    // 原有的基于规则的意图分析作为回退
     const lowerQuery = query.toLowerCase();
     
-    // 更精确的意图识别
     if (lowerQuery.includes('详情') || lowerQuery.includes('details') || lowerQuery.includes('信息')) {
       return { type: 'get_movie_details', confidence: 0.9 };
     }
     
-    // 只有在明确提到"对比"、"比较"时才执行比较工作流
     if ((lowerQuery.includes('对比') || lowerQuery.includes('compare')) && 
         (lowerQuery.includes('和') || lowerQuery.includes('vs') || lowerQuery.includes('与'))) {
       return { type: 'compare_movies', confidence: 0.8 };
@@ -186,17 +179,15 @@ class MovieSearchOrchestrator {
       return { type: 'recommend_movies', confidence: 0.8 };
     }
     
-    // 默认执行搜索工作流
     return { type: 'search_movies', confidence: 0.7 };
   }
 
+  /** 分析搜索策略 */
   private analyzeSearchStrategy(query: string, aiIntent?: any): any {
-    // 如果AI意图分析可用，优先使用AI结果
     if (aiIntent && aiIntent.searchStrategy) {
       const strategy = aiIntent.searchStrategy;
       
       if (strategy.type === 'genre_search') {
-        // 从AI提取的类型信息中获取类型ID
         const genreId = this.getGenreIdFromAI(aiIntent.extractedEntities?.genres);
         if (genreId) {
           return { type: 'genre_search', genre: genreId, keyword: aiIntent.extractedEntities?.genres?.[0] };
@@ -208,7 +199,6 @@ class MovieSearchOrchestrator {
       }
       
       if (strategy.type === 'director_search') {
-        // 从AI提取的导演信息中获取导演名称
         const directorName = aiIntent.extractedEntities?.directors?.[0];
         if (directorName) {
           return { type: 'director_search', directorName };
@@ -218,7 +208,6 @@ class MovieSearchOrchestrator {
       return { type: 'direct_search', query };
     }
     
-    // 回退到基于规则的搜索策略分析
     return this.ruleBasedSearchStrategy(query);
   }
 
@@ -247,20 +236,18 @@ class MovieSearchOrchestrator {
     return null;
   }
 
+  /** 基于规则的搜索策略分析 */
   private ruleBasedSearchStrategy(query: string): any {
     const lowerQuery = query.toLowerCase();
     
-    // 检查是否是导演搜索
     if (lowerQuery.includes('导演') || lowerQuery.includes('director') || 
         lowerQuery.includes('执导') || lowerQuery.includes('执导的')) {
-      // 提取导演名称
       const directorName = this.extractDirectorName(query);
       if (directorName) {
         return { type: 'director_search', directorName };
       }
     }
     
-    // 类型搜索映射
     const genreMap: Record<string, number> = {
       '科幻': 878, 'science fiction': 878, 'sci-fi': 878, '科幻电影': 878,
       '动作': 28, 'action': 28, '动作片': 28,
@@ -275,26 +262,23 @@ class MovieSearchOrchestrator {
       '悬疑': 9648, 'mystery': 9648, '悬疑片': 9648
     };
     
-    // 检查是否是类型搜索
     for (const [keyword, genreId] of Object.entries(genreMap)) {
       if (lowerQuery.includes(keyword)) {
         return { type: 'genre_search', genre: genreId, keyword };
       }
     }
     
-    // 检查是否是热门搜索
     if (lowerQuery.includes('热门') || lowerQuery.includes('popular') || 
         lowerQuery.includes('推荐') || lowerQuery.includes('recommend') ||
         lowerQuery.includes('经典') || lowerQuery.includes('classic')) {
       return { type: 'popular_search', category: 'popular' };
     }
     
-    // 默认直接搜索
     return { type: 'direct_search', query };
   }
 
+  /** 提取导演名称 */
   private extractDirectorName(query: string): string | null {
-    // 简单的导演名称提取逻辑
     const patterns = [
       /(.+?)导演的电影/,
       /(.+?)执导的电影/,
@@ -313,11 +297,11 @@ class MovieSearchOrchestrator {
     return null;
   }
 
+  /** 执行电影搜索工作流 */
   private async executeMovieSearchWorkflow(query: string, executionTrace: ExecutionStep[]): Promise<any> {
     const startTime = Date.now();
     
     try {
-      // 首先进行AI意图分析
       let aiIntent;
       try {
         aiIntent = await this.callLLMForIntentAnalysis(query);
@@ -343,22 +327,17 @@ class MovieSearchOrchestrator {
         });
       }
       
-      // 智能搜索策略：根据AI分析结果或规则选择不同的搜索方法
       const searchStrategy = this.analyzeSearchStrategy(query, aiIntent);
       
       let searchResults;
       
       if (searchStrategy.type === 'genre_search') {
-        // 类型搜索：使用TMDB的类型发现API
         searchResults = await this.executeGenreSearch(searchStrategy.genre, executionTrace);
       } else if (searchStrategy.type === 'popular_search') {
-        // 热门搜索：获取热门电影
         searchResults = await this.executePopularSearch(searchStrategy.category, executionTrace);
       } else if (searchStrategy.type === 'director_search') {
-        // 导演搜索：搜索指定导演的电影
         searchResults = await this.executeDirectorSearch(searchStrategy.directorName, executionTrace);
       } else {
-        // 普通搜索：直接搜索关键词
         searchResults = await this.executeDirectSearch(query, executionTrace);
       }
 
@@ -372,7 +351,6 @@ class MovieSearchOrchestrator {
         timestamp: new Date()
       });
 
-      // 聚合结果
       const aggregatedResults = await this.aggregateSearchResults(searchResults);
       
       executionTrace.push({
@@ -404,18 +382,17 @@ class MovieSearchOrchestrator {
     }
   }
 
+  /** 执行电影详情工作流 */
   private async executeMovieDetailsWorkflow(query: string, executionTrace: ExecutionStep[]): Promise<any> {
     const startTime = Date.now();
     
     try {
-      // 首先搜索电影
       const searchResults = await this.executeMovieSearchWorkflow(query, executionTrace);
       
       if (!searchResults.results || searchResults.results.length === 0) {
         throw new Error('No movies found');
       }
 
-      // 获取第一个结果的详细信息
       const firstMovie = searchResults.results[0];
       const movieId = firstMovie.tmdbId || firstMovie.imdbId;
       
@@ -423,7 +400,6 @@ class MovieSearchOrchestrator {
         throw new Error('No valid movie ID found');
       }
 
-      // 获取详细信息
       const details = await this.callTool('tmdb-provider', 'get_movie_details', { movieId });
       
       executionTrace.push({
@@ -621,18 +597,75 @@ class MovieSearchOrchestrator {
     }
   }
 
+  private async searchTVMazeByGenre(genreId: number): Promise<any> {
+    try {
+      // 将TMDB类型ID映射到TVMaze搜索关键词
+      const genreKeywords: { [key: number]: string } = {
+        878: 'sci-fi', // Science Fiction
+        28: 'action',  // Action
+        12: 'adventure', // Adventure
+        16: 'animation', // Animation
+        35: 'comedy',   // Comedy
+        80: 'crime',    // Crime
+        18: 'drama',    // Drama
+        10751: 'family', // Family
+        14: 'fantasy',  // Fantasy
+        36: 'history',  // History
+        27: 'horror',   // Horror
+        10402: 'music', // Music
+        9648: 'mystery', // Mystery
+        10749: 'romance', // Romance
+        53: 'thriller', // Thriller
+        10752: 'war',   // War
+        37: 'western'   // Western
+      };
+
+      const keyword = genreKeywords[genreId] || 'sci-fi';
+      
+      // 调用TVMaze服务
+      const response = await axios.get(`${TVMAZE_PROVIDER_URL}/api/search`, {
+        params: { query: keyword, page: 1 }
+      });
+
+      return {
+        success: true,
+        data: response.data.data || [],
+        totalResults: response.data.totalResults || 0
+      };
+    } catch (error) {
+      logger.warn('TVMaze genre search failed:', error);
+      return {
+        success: false,
+        data: [],
+        totalResults: 0,
+        error: (error as Error).message
+      };
+    }
+  }
+
   private async executeGenreSearch(genreId: number, executionTrace: ExecutionStep[]): Promise<any> {
     try {
-      // 使用TMDB的类型发现API获取该类型的热门电影
-      const tmdbResults = await this.callTool('tmdb-provider', 'discover_movies', { 
-        genreId, 
-        sortBy: 'popularity.desc',
-        page: 1
-      });
+      // 并行搜索多个数据源
+      const [tmdbResults, omdbResults, tvmazeResults] = await Promise.allSettled([
+        // TMDB类型发现API
+        this.callTool('tmdb-provider', 'discover_movies', { 
+          genreId, 
+          sortBy: 'popularity.desc',
+          page: 1
+        }),
+        // OMDb关键词搜索（因为OMDb不支持类型搜索）
+        this.callTool('omdb-provider', 'search_movies', { 
+          query: 'sci-fi',
+          type: 'movie'
+        }),
+        // TVMaze通过传统API搜索
+        this.searchTVMazeByGenre(genreId)
+      ]);
       
       return {
-        tmdb: tmdbResults,
-        omdb: null // OMDb不支持类型搜索
+        tmdb: tmdbResults.status === 'fulfilled' ? tmdbResults.value : null,
+        omdb: omdbResults.status === 'fulfilled' ? omdbResults.value : null,
+        tvmaze: tvmazeResults.status === 'fulfilled' ? tvmazeResults.value : null
       };
     } catch (error) {
       logger.error('Genre search failed:', error);
@@ -670,17 +703,42 @@ class MovieSearchOrchestrator {
     }
   }
 
+  private async searchTVMazeDirect(query: string): Promise<any> {
+    try {
+      // 调用TVMaze服务进行直接搜索
+      const response = await axios.get(`${TVMAZE_PROVIDER_URL}/api/search`, {
+        params: { query, page: 1 }
+      });
+
+      return {
+        success: true,
+        data: response.data.data || [],
+        totalResults: response.data.totalResults || 0
+      };
+    } catch (error) {
+      logger.warn('TVMaze direct search failed:', error);
+      return {
+        success: false,
+        data: [],
+        totalResults: 0,
+        error: (error as Error).message
+      };
+    }
+  }
+
   private async executeDirectSearch(query: string, executionTrace: ExecutionStep[]): Promise<any> {
     try {
       // 并行搜索多个数据源
-      const [tmdbResults, omdbResults] = await Promise.allSettled([
+      const [tmdbResults, omdbResults, tvmazeResults] = await Promise.allSettled([
         this.callTool('tmdb-provider', 'search_movies', { query }),
-        this.callTool('omdb-provider', 'search_movies', { query })
+        this.callTool('omdb-provider', 'search_movies', { query }),
+        this.searchTVMazeDirect(query)
       ]);
 
       return {
         tmdb: tmdbResults.status === 'fulfilled' ? tmdbResults.value : null,
-        omdb: omdbResults.status === 'fulfilled' ? omdbResults.value : null
+        omdb: omdbResults.status === 'fulfilled' ? omdbResults.value : null,
+        tvmaze: tvmazeResults.status === 'fulfilled' ? tvmazeResults.value : null
       };
     } catch (error) {
       logger.error('Direct search failed:', error);
@@ -692,11 +750,19 @@ class MovieSearchOrchestrator {
     // 简单的聚合逻辑（实际项目中可以使用专门的聚合服务）
     const allResults = [];
     
+    logger.info('Starting aggregation with search results:', {
+      tmdb: searchResults.tmdb ? 'present' : 'missing',
+      omdb: searchResults.omdb ? 'present' : 'missing',
+      tvmaze: searchResults.tvmaze ? 'present' : 'missing'
+    });
+    
     // 处理TMDB结果
     if (searchResults.tmdb && searchResults.tmdb.success && searchResults.tmdb.result && searchResults.tmdb.result.results) {
+      logger.info(`Processing ${searchResults.tmdb.result.results.length} TMDB results`);
       allResults.push(...searchResults.tmdb.result.results.map((movie: any) => ({
         ...movie,
         source: 'tmdb',
+        sources: ['tmdb'],
         tmdbId: movie.id,
         poster: movie.posterPath ? `https://image.tmdb.org/t/p/w500${movie.posterPath}` : null,
         backdrop: movie.backdropPath ? `https://image.tmdb.org/t/p/w1280${movie.backdropPath}` : null,
@@ -709,13 +775,22 @@ class MovieSearchOrchestrator {
           maxValue: 10
         }]
       })));
+    } else {
+      logger.warn('TMDB results not processed:', {
+        hasTmdb: !!searchResults.tmdb,
+        success: searchResults.tmdb?.success,
+        hasResult: !!searchResults.tmdb?.result,
+        hasResults: !!searchResults.tmdb?.result?.results
+      });
     }
     
     // 处理OMDb结果
     if (searchResults.omdb && searchResults.omdb.success && searchResults.omdb.result && searchResults.omdb.result.results) {
+      logger.info(`Processing ${searchResults.omdb.result.results.length} OMDb results`);
       allResults.push(...searchResults.omdb.result.results.map((movie: any) => ({
         ...movie,
         source: 'omdb',
+        sources: ['omdb'],
         imdbId: movie.imdbId,
         poster: movie.poster,
         year: movie.year ? parseInt(movie.year) : null,
@@ -725,11 +800,47 @@ class MovieSearchOrchestrator {
           maxValue: 10
         }]
       })));
+    } else {
+      logger.warn('OMDb results not processed:', {
+        hasOmdb: !!searchResults.omdb,
+        success: searchResults.omdb?.success,
+        hasResult: !!searchResults.omdb?.result,
+        hasResults: !!searchResults.omdb?.result?.results
+      });
     }
 
-    // 简单的去重和排序
+    // 处理TVMaze结果
+    if (searchResults.tvmaze && searchResults.tvmaze.success && searchResults.tvmaze.data) {
+      logger.info(`Processing ${searchResults.tvmaze.data.length} TVMaze results`);
+      allResults.push(...searchResults.tvmaze.data.map((show: any) => ({
+        ...show,
+        source: 'tvmaze',
+        sources: ['tvmaze'],
+        tvmazeId: show.id,
+        poster: show.image?.medium || show.image?.original || null,
+        year: show.premiered ? new Date(show.premiered).getFullYear() : null,
+        plot: show.summary ? show.summary.replace(/<[^>]*>/g, '') : null, // 移除HTML标签
+        ratings: show.rating?.average ? [{
+          source: 'TVMaze',
+          value: show.rating.average,
+          maxValue: 10
+        }] : []
+      })));
+    } else {
+      logger.warn('TVMaze results not processed:', {
+        hasTvmaze: !!searchResults.tvmaze,
+        success: searchResults.tvmaze?.success,
+        hasData: !!searchResults.tvmaze?.data
+      });
+    }
+
+    logger.info(`Total aggregated results: ${allResults.length}`);
+
+    // 去重，但保持原始顺序（按数据源相关度排序：TMDB > OMDb > TVMaze）
+    // 这样和关键词搜索保持一致，都是按相关度而不是评分排序
     const uniqueResults = this.deduplicateResults(allResults);
-    return uniqueResults.sort((a, b) => (b.voteAverage || 0) - (a.voteAverage || 0));
+    logger.info(`After deduplication: ${uniqueResults.length} results`);
+    return uniqueResults;
   }
 
   private deduplicateResults(results: any[]): any[] {

@@ -6,6 +6,21 @@ export interface CacheOptions {
   prefix?: string;
 }
 
+// Helper function to parse Redis URL
+function parseRedisURL(url: string): RedisOptions {
+  const parsed = new URL(url);
+  return {
+    host: parsed.hostname,
+    port: parseInt(parsed.port) || 6379,
+    password: parsed.password || undefined,
+  };
+}
+
+export interface CacheOptions {
+  ttl?: number; // Time to live in seconds
+  prefix?: string;
+}
+
 export class RedisClient {
   private client: Redis;
   private logger: Logger;
@@ -14,18 +29,34 @@ export class RedisClient {
   constructor(options?: RedisOptions) {
     this.logger = new Logger('RedisClient');
     
-    const defaultOptions: RedisOptions = {
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-      retryStrategy: (times: number) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
-      maxRetriesPerRequest: 3,
-      enableReadyCheck: true,
-      lazyConnect: false,
-    };
+    let defaultOptions: RedisOptions;
+    
+    // Support REDIS_URL environment variable
+    if (process.env.REDIS_URL) {
+      defaultOptions = {
+        ...parseRedisURL(process.env.REDIS_URL),
+        retryStrategy: (times: number) => {
+          const delay = Math.min(times * 50, 2000);
+          return delay;
+        },
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: true,
+        lazyConnect: false,
+      };
+    } else {
+      defaultOptions = {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: parseInt(process.env.REDIS_PORT || '6379'),
+        password: process.env.REDIS_PASSWORD,
+        retryStrategy: (times: number) => {
+          const delay = Math.min(times * 50, 2000);
+          return delay;
+        },
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: true,
+        lazyConnect: false,
+      };
+    }
 
     this.client = new Redis({ ...defaultOptions, ...options });
 
@@ -120,14 +151,22 @@ export class RedisClient {
    */
   async deletePattern(pattern: string): Promise<number> {
     if (!this.isConnected) {
+      this.logger.warn('Redis not connected, cannot delete pattern');
       return 0;
     }
 
     try {
       const keys = await this.client.keys(pattern);
-      if (keys.length === 0) return 0;
+      this.logger.info(`Pattern "${pattern}" matched ${keys.length} keys`);
       
-      return await this.client.del(...keys);
+      if (keys.length === 0) {
+        this.logger.info(`No keys found matching pattern: ${pattern}`);
+        return 0;
+      }
+      
+      const deleted = await this.client.del(...keys);
+      this.logger.info(`Deleted ${deleted} keys matching pattern: ${pattern}`);
+      return deleted;
     } catch (error) {
       this.logger.error(`Error deleting pattern ${pattern}:`, error);
       return 0;

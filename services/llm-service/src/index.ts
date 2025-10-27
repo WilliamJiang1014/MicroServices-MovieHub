@@ -6,7 +6,6 @@ import { Logger, getRedisClient, CacheManager } from '@moviehub/shared';
 import { QwenClient } from './qwen-client';
 import { LLMRequest, MovieSummaryRequest } from '@moviehub/shared';
 
-// 加载项目根目录的 .env 文件
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 const app = express();
@@ -21,19 +20,16 @@ const qwenClient = new QwenClient(
   process.env.QWEN_API_URL
 );
 
-// Initialize Redis and Cache Manager
 const redis = getRedisClient();
 const cacheManager = new CacheManager(redis, {
   keyPrefix: 'llm',
-  defaultTTL: 86400, // 24 hours - LLM responses are expensive to generate
+  defaultTTL: 86400,
 });
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', service: 'llm-service' });
 });
 
-// Generic chat endpoint
 app.post('/api/chat', async (req, res) => {
   try {
     const request: LLMRequest = req.body;
@@ -50,7 +46,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Intent analysis endpoint for MCP Graph Orchestrator
+/** 意图分析端点（供 MCP Graph Orchestrator 使用） */
 app.post('/analyze-intent', async (req, res) => {
   try {
     const { query, context } = req.body;
@@ -118,7 +114,6 @@ app.post('/analyze-intent', async (req, res) => {
     const response = await qwenClient.chat(request);
     
     try {
-      // 尝试解析LLM返回的JSON
       const intentResult = JSON.parse(response.content);
       
       res.json({
@@ -127,7 +122,6 @@ app.post('/analyze-intent', async (req, res) => {
       });
     } catch (parseError) {
       logger.warn('Failed to parse LLM response as JSON:', response.content);
-      // 如果解析失败，返回默认结果
       res.json({
         success: true,
         result: {
@@ -151,7 +145,7 @@ app.post('/analyze-intent', async (req, res) => {
   }
 });
 
-// Movie summary endpoint (with caching)
+/** 电影摘要端点（带缓存） */
 app.post('/api/movie/summary', async (req, res) => {
   try {
     const { title, plot, genres }: MovieSummaryRequest = req.body;
@@ -160,7 +154,6 @@ app.post('/api/movie/summary', async (req, res) => {
       return res.status(400).json({ error: 'Title is required' });
     }
 
-    // Try to get full summary from cache
     const cacheKey = `full:${title.toLowerCase()}`;
     const cached = await cacheManager.getCachedLLMSummary(title, 'full');
     
@@ -183,7 +176,6 @@ app.post('/api/movie/summary', async (req, res) => {
       similarMovies,
     };
 
-    // Cache the full summary (24 hours)
     await cacheManager.cacheLLMSummary(title, 'full', response, 86400);
 
     res.json(response);
@@ -193,7 +185,7 @@ app.post('/api/movie/summary', async (req, res) => {
   }
 });
 
-// Generate summary only (with caching)
+/** 仅生成摘要（带缓存） */
 app.post('/api/movie/summary-only', async (req, res) => {
   try {
     const { title, plot, genres } = req.body;
@@ -202,7 +194,6 @@ app.post('/api/movie/summary-only', async (req, res) => {
       return res.status(400).json({ error: 'Title is required' });
     }
 
-    // Try to get from cache
     const cached = await cacheManager.getCachedLLMSummary(title, 'short');
     
     if (cached) {
@@ -215,7 +206,6 @@ app.post('/api/movie/summary-only', async (req, res) => {
     const summary = await qwenClient.generateMovieSummary(title, plot, genres);
     const response = { summary };
 
-    // Cache the short summary
     await cacheManager.cacheLLMSummary(title, 'short', response, 86400);
 
     res.json(response);
@@ -225,7 +215,7 @@ app.post('/api/movie/summary-only', async (req, res) => {
   }
 });
 
-// Generate similar movies (with caching)
+/** 生成相似电影（带缓存） */
 app.post('/api/movie/similar', async (req, res) => {
   try {
     const { title, genres, plot } = req.body;
@@ -234,7 +224,6 @@ app.post('/api/movie/similar', async (req, res) => {
       return res.status(400).json({ error: 'Title is required' });
     }
 
-    // Try to get from cache
     const cached = await cacheManager.getCachedLLMSummary(title, 'similar');
     
     if (cached) {
@@ -247,7 +236,6 @@ app.post('/api/movie/similar', async (req, res) => {
     const similarMovies = await qwenClient.generateSimilarMovies(title, genres, plot);
     const response = { similarMovies };
 
-    // Cache the similar movies
     await cacheManager.cacheLLMSummary(title, 'similar', response, 86400);
 
     res.json(response);

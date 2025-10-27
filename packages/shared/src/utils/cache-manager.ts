@@ -250,10 +250,30 @@ export class CacheManager {
    * Invalidate search cache
    */
   async invalidateSearchCache(query?: string): Promise<void> {
-    const pattern = query 
-      ? this.makeKey('search', query.toLowerCase(), '*')
-      : this.makeKey('search', '*');
-    await this.redis.deletePattern(pattern);
+    if (query) {
+      // Clear specific query from all services
+      // Patterns: *:search:query:*:*
+      const patterns = [
+        `*:search:${query.toLowerCase()}:*`,
+        `aggregation:search:${query.toLowerCase()}:*`,
+        `provider:*:search:*${query.toLowerCase()}*`,
+      ];
+      
+      for (const pattern of patterns) {
+        await this.redis.deletePattern(pattern);
+      }
+    } else {
+      // Clear all search caches from all services
+      const patterns = [
+        'aggregation:search:*',
+        'provider:*:search:*',
+        this.makeKey('search', '*'),
+      ];
+      
+      for (const pattern of patterns) {
+        await this.redis.deletePattern(pattern);
+      }
+    }
   }
 
   /**

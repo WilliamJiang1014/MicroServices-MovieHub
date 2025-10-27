@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import axios from 'axios';
 import { WebSocketServer } from 'ws';
 import { Logger } from '@moviehub/shared';
 
@@ -127,9 +128,9 @@ class MCPGateway {
     });
 
     // 注册服务器
-    app.post('/register', (req, res) => {
+    app.post('/register', async (req, res) => {
       try {
-        this.registerServer(req.body);
+        await this.registerServer(req.body);
         res.json({ success: true, message: 'Server registered successfully' });
       } catch (error) {
         logger.error('Server registration failed:', error);
@@ -138,9 +139,21 @@ class MCPGateway {
     });
   }
 
-  private registerServer(serverInfo: Partial<MCPServerInfo>) {
+  private async registerServer(serverInfo: Partial<MCPServerInfo>) {
     if (!serverInfo.name || !serverInfo.endpoint) {
       throw new Error('Server name and endpoint are required');
+    }
+
+    // 尝试从服务器获取工具列表
+    let tools: MCPTool[] = serverInfo.tools || [];
+    try {
+      const toolsResponse = await axios.get(`${serverInfo.endpoint}/tools`);
+      if (toolsResponse.data && toolsResponse.data.tools) {
+        tools = toolsResponse.data.tools;
+        logger.info(`Discovered ${tools.length} tools from ${serverInfo.name}`);
+      }
+    } catch (error) {
+      logger.warn(`Failed to discover tools from ${serverInfo.name}:`, error);
     }
 
     const server: MCPServerInfo = {
@@ -148,13 +161,13 @@ class MCPGateway {
       version: serverInfo.version || '1.0.0',
       description: serverInfo.description || '',
       endpoint: serverInfo.endpoint,
-      tools: serverInfo.tools || [],
+      tools: tools,
       status: 'online',
       lastHeartbeat: new Date()
     };
 
     this.servers.set(server.name, server);
-    logger.info(`Registered MCP server: ${server.name} at ${server.endpoint}`);
+    logger.info(`Registered MCP server: ${server.name} at ${server.endpoint} with ${tools.length} tools`);
   }
 
   private discoverTools(): MCPTool[] {
