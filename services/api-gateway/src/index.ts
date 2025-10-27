@@ -79,7 +79,7 @@ app.get('/', (req, res) => {
 /** 搜索电影（带缓存） */
 app.get('/api/search', async (req, res) => {
   try {
-    const query = req.query.query as string;
+    const query = (req.query.query || req.query.q) as string;
     const year = req.query.year ? parseInt(req.query.year as string) : undefined;
     const sort = req.query.sort as string;
     

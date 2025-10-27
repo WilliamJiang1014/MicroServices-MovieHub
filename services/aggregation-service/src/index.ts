@@ -39,7 +39,7 @@ app.get('/health', (req, res) => {
 app.get('/api/search', async (req, res) => {
   try {
     const params: MovieSearchParams = {
-      query: req.query.query as string,
+      query: (req.query.query || req.query.q) as string,
       year: req.query.year ? parseInt(req.query.year as string) : undefined,
       page: req.query.page ? parseInt(req.query.page as string) : 1,
       limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
