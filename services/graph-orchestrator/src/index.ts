@@ -190,7 +190,18 @@ class MovieSearchOrchestrator {
       if (strategy.type === 'genre_search') {
         const genreId = this.getGenreIdFromAI(aiIntent.extractedEntities?.genres);
         if (genreId) {
-          return { type: 'genre_search', genre: genreId, keyword: aiIntent.extractedEntities?.genres?.[0] };
+          // 提取年份范围参数
+          const yearRange = strategy.parameters?.year_range;
+          const minYear = yearRange?.[0];
+          const maxYear = yearRange?.[1];
+          
+          return { 
+            type: 'genre_search', 
+            genre: genreId, 
+            keyword: aiIntent.extractedEntities?.genres?.[0],
+            minYear,
+            maxYear
+          };
         }
       }
       
@@ -332,7 +343,12 @@ class MovieSearchOrchestrator {
       let searchResults;
       
       if (searchStrategy.type === 'genre_search') {
-        searchResults = await this.executeGenreSearch(searchStrategy.genre, executionTrace);
+        searchResults = await this.executeGenreSearch(
+          searchStrategy.genre, 
+          executionTrace,
+          searchStrategy.minYear,
+          searchStrategy.maxYear
+        );
       } else if (searchStrategy.type === 'popular_search') {
         searchResults = await this.executePopularSearch(searchStrategy.category, executionTrace);
       } else if (searchStrategy.type === 'director_search') {
@@ -351,7 +367,11 @@ class MovieSearchOrchestrator {
         timestamp: new Date()
       });
 
-      const aggregatedResults = await this.aggregateSearchResults(searchResults);
+      const aggregatedResults = await this.aggregateSearchResults(
+        searchResults, 
+        searchStrategy.minYear, 
+        searchStrategy.maxYear
+      );
       
       executionTrace.push({
         step: 'aggregate_results',
@@ -643,16 +663,34 @@ class MovieSearchOrchestrator {
     }
   }
 
-  private async executeGenreSearch(genreId: number, executionTrace: ExecutionStep[]): Promise<any> {
+  private async executeGenreSearch(
+    genreId: number, 
+    executionTrace: ExecutionStep[],
+    minYear?: number,
+    maxYear?: number
+  ): Promise<any> {
     try {
+      // 构建TMDB discover参数
+      const tmdbParams: any = { 
+        genreId, 
+        sortBy: 'popularity.desc',
+        page: 1
+      };
+      
+      // 添加年份过滤
+      if (minYear) {
+        tmdbParams.primaryReleaseDateGte = `${minYear}-01-01`;
+      }
+      if (maxYear) {
+        tmdbParams.primaryReleaseDateLte = `${maxYear}-12-31`;
+      }
+      
+      logger.info(`Genre search with filters: genreId=${genreId}, minYear=${minYear}, maxYear=${maxYear}`);
+      
       // 并行搜索多个数据源
       const [tmdbResults, omdbResults, tvmazeResults] = await Promise.allSettled([
-        // TMDB类型发现API
-        this.callTool('tmdb-provider', 'discover_movies', { 
-          genreId, 
-          sortBy: 'popularity.desc',
-          page: 1
-        }),
+        // TMDB类型发现API（支持年份过滤）
+        this.callTool('tmdb-provider', 'discover_movies', tmdbParams),
         // OMDb关键词搜索（因为OMDb不支持类型搜索）
         this.callTool('omdb-provider', 'search_movies', { 
           query: 'sci-fi',
@@ -746,14 +784,20 @@ class MovieSearchOrchestrator {
     }
   }
 
-  private async aggregateSearchResults(searchResults: any): Promise<any[]> {
+  private async aggregateSearchResults(
+    searchResults: any, 
+    minYear?: number, 
+    maxYear?: number
+  ): Promise<any[]> {
     // 简单的聚合逻辑（实际项目中可以使用专门的聚合服务）
     const allResults = [];
     
     logger.info('Starting aggregation with search results:', {
       tmdb: searchResults.tmdb ? 'present' : 'missing',
       omdb: searchResults.omdb ? 'present' : 'missing',
-      tvmaze: searchResults.tvmaze ? 'present' : 'missing'
+      tvmaze: searchResults.tvmaze ? 'present' : 'missing',
+      minYear,
+      maxYear
     });
     
     // 处理TMDB结果
@@ -836,9 +880,24 @@ class MovieSearchOrchestrator {
 
     logger.info(`Total aggregated results: ${allResults.length}`);
 
+    // 应用年份过滤（针对OMDb和TVMaze结果，因为它们不支持服务端过滤）
+    let filteredResults = allResults;
+    if (minYear || maxYear) {
+      filteredResults = allResults.filter(movie => {
+        if (!movie.year) return false;
+        const year = typeof movie.year === 'number' ? movie.year : parseInt(movie.year);
+        if (isNaN(year)) return false;
+        
+        if (minYear && year < minYear) return false;
+        if (maxYear && year > maxYear) return false;
+        return true;
+      });
+      logger.info(`After year filter (${minYear}-${maxYear}): ${filteredResults.length} results`);
+    }
+
     // 去重，但保持原始顺序（按数据源相关度排序：TMDB > OMDb > TVMaze）
     // 这样和关键词搜索保持一致，都是按相关度而不是评分排序
-    const uniqueResults = this.deduplicateResults(allResults);
+    const uniqueResults = this.deduplicateResults(filteredResults);
     logger.info(`After deduplication: ${uniqueResults.length} results`);
     return uniqueResults;
   }
