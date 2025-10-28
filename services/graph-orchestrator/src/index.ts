@@ -106,7 +106,7 @@ class MovieSearchOrchestrator {
           result = await this.executeMovieComparisonWorkflow(query, executionTrace);
           break;
         case 'recommend_movies':
-          result = await this.executeRecommendationWorkflow(query, userId, executionTrace);
+          result = await this.executeRecommendationWorkflow(query, userId, intent, executionTrace);
           break;
         default:
           result = await this.executeMovieSearchWorkflow(query, executionTrace);
@@ -541,10 +541,11 @@ class MovieSearchOrchestrator {
     }
   }
 
-  private async executeRecommendationWorkflow(query: string, userId: string | undefined, executionTrace: ExecutionStep[]): Promise<any> {
+  private async executeRecommendationWorkflow(query: string, userId: string | undefined, aiIntent: any, executionTrace: ExecutionStep[]): Promise<any> {
     const startTime = Date.now();
     
     try {
+      logger.info(`Starting recommendation workflow for query: ${query}`);
       // 获取用户观影历史（如果有）
       let userHistory = [];
       if (userId) {
@@ -556,8 +557,27 @@ class MovieSearchOrchestrator {
         }
       }
 
+      // 提取年份约束（如果有）
+      const years = aiIntent?.extractedEntities?.years || [];
+      let minYear = years.length > 0 ? Math.min(...years) : undefined;
+      let maxYear = years.length > 0 ? Math.max(...years) : undefined;
+      
+      // 如果查询是"X年之后"的形式，不设置maxYear（或设置为当前年份+1）
+      if (minYear && (!maxYear || maxYear - minYear <= 5)) {
+        // 看起来是范围查询，保留 maxYear
+        // 但如果 maxYear 是当前年份或更早，扩展到未来
+        const currentYear = new Date().getFullYear();
+        if (maxYear && maxYear <= currentYear) {
+          maxYear = currentYear + 1; // 包含今年和明年的电影
+        }
+      }
+      
+      logger.info(`Year constraints: minYear=${minYear}, maxYear=${maxYear}`);
+
       // 基于查询和用户历史生成推荐
-      const recommendations = await this.generateRecommendations(query, userHistory);
+      logger.info(`Calling generateRecommendations with query: ${query}`);
+      const recommendations = await this.generateRecommendations(query, userHistory, minYear, maxYear);
+      logger.info(`Got ${recommendations.length} recommendations from generateRecommendations`);
       
       executionTrace.push({
         step: 'generate_recommendations',
@@ -571,7 +591,7 @@ class MovieSearchOrchestrator {
 
       return {
         type: 'recommendations',
-        recommendations,
+        results: recommendations,  // 统一使用 results 字段
         basedOn: query,
         userHistory: userHistory.length > 0
       };
@@ -928,11 +948,59 @@ class MovieSearchOrchestrator {
     };
   }
 
-  private async generateRecommendations(query: string, userHistory: any[]): Promise<any[]> {
+  private async generateRecommendations(query: string, userHistory: any[], minYear?: number, maxYear?: number): Promise<any[]> {
     // 简单的推荐逻辑（实际项目中可以使用机器学习模型）
     try {
-      const searchResults = await this.executeMovieSearchWorkflow(query, []);
-      return searchResults.results.slice(0, 5);
+      logger.info(`Generating recommendations for query: ${query}, minYear: ${minYear}, maxYear: ${maxYear}`);
+      
+      // 如果只有年份约束而没有具体的搜索词，使用热门电影API
+      const hasYearConstraint = minYear !== undefined || maxYear !== undefined;
+      let searchResults;
+      
+      if (hasYearConstraint) {
+        // 使用popular search并进行年份过滤
+        try {
+          logger.info(`Getting popular movies with year filter: ${minYear}-${maxYear}`);
+          const popularResults = await this.callTool('tmdb-provider', 'get_popular_movies', { page: 1 });
+          
+          // MCP Gateway 返回的结果可能有嵌套结构
+          let movies = popularResults?.result?.results || popularResults?.results || [];
+          logger.info(`Got ${movies.length} popular movies before year filter`);
+          
+          movies = movies.filter((movie: any) => {
+            // 尝试从不同的字段获取年份
+            let year = movie.year;
+            if (!year && movie.releaseDate) {
+              // 从 releaseDate (YYYY-MM-DD) 提取年份
+              const match = movie.releaseDate.match(/^(\d{4})/);
+              if (match) {
+                year = parseInt(match[1]);
+              }
+            }
+            
+            if (!year) return false;
+            const movieYear = typeof year === 'number' ? year : parseInt(year);
+            if (isNaN(movieYear)) return false;
+            
+            if (minYear && movieYear < minYear) return false;
+            if (maxYear && movieYear > maxYear) return false;
+            return true;
+          });
+          
+          logger.info(`After year filter: ${movies.length} movies`);
+          return movies.slice(0, 10);
+        } catch (error) {
+          logger.error('Popular movies API failed, falling back to search:', error);
+          searchResults = await this.executeMovieSearchWorkflow(query, []);
+        }
+      } else {
+        searchResults = await this.executeMovieSearchWorkflow(query, []);
+      }
+      
+      logger.info(`Search results type: ${searchResults.type}, results count: ${searchResults.results?.length || 0}`);
+      const recommendations = searchResults.results ? searchResults.results.slice(0, 10) : [];
+      logger.info(`Returning ${recommendations.length} recommendations`);
+      return recommendations;
     } catch (error) {
       logger.error('Failed to generate recommendations:', error);
       return [];
