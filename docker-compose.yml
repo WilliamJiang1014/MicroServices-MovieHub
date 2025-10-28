@@ -323,6 +323,7 @@ services:
       - NODE_ENV=production
       - PORT=3010
       - MCP_GATEWAY_URL=http://mcp-gateway:3007
+      - TVMAZE_PROVIDER_URL=http://tvmaze:3006
       - REDIS_URL=redis://redis:6379
       - REDIS_HOST=redis
       - REDIS_PORT=6379
